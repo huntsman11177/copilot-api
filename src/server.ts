@@ -43,8 +43,7 @@ const handleResponses = async (c: Context) => {
   }
 
   try {
-    const upstreamPath = c.req.path.replace(/^\/v1/, "")
-    const upstreamUrl = `https://api.githubcopilot.com${upstreamPath}`
+    const upstreamUrl = "https://api.githubcopilot.com/v1/responses"
 
     const upstreamResponse = await fetch(upstreamUrl, {
       method: "POST",
