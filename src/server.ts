@@ -1,4 +1,4 @@
-import { Hono } from "hono"
+import { Hono, type Context } from "hono"
 import { cors } from "hono/cors"
 import { logger } from "hono/logger"
 
@@ -23,9 +23,9 @@ server.route("/embeddings", embeddingRoutes)
 server.route("/usage", usageRoute)
 server.route("/token", tokenRoute)
 
-server.post("/v1/responses", async (c) => {
-  const bearer = c.req.header("authorization")
-  const token = bearer?.replace(/Bearer\s+/i, "")
+const handleResponses = async (c: Context) => {
+  const bearer = c.req.header("authorization") ?? ""
+  const token = bearer.replace(/Bearer\s+/i, "")
   const actualToken = token === "dummy" ? state.copilotToken : token
 
   if (!actualToken) {
@@ -65,10 +65,14 @@ server.post("/v1/responses", async (c) => {
     console.error("Proxy Error:", error)
     return c.json({ error: "Failed to proxy request to /v1/responses" }, 500)
   }
-})
+}
+
+server.post("/v1/responses", handleResponses)
+server.post("/v1/responses/*", handleResponses)
 
 // Compatibility with tools that expect v1/ prefix
 server.route("/v1/chat/completions", completionRoutes)
+
 server.route("/v1/models", modelRoutes)
 server.route("/v1/embeddings", embeddingRoutes)
 
