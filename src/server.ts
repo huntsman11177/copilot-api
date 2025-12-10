@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import { cors } from "hono/cors"
 import { logger } from "hono/logger"
 
+import { state } from "./lib/state"
 import { completionRoutes } from "./routes/chat-completions/route"
 import { embeddingRoutes } from "./routes/embeddings/route"
 import { messageRoutes } from "./routes/messages/route"
@@ -21,6 +22,50 @@ server.route("/models", modelRoutes)
 server.route("/embeddings", embeddingRoutes)
 server.route("/usage", usageRoute)
 server.route("/token", tokenRoute)
+
+server.post("/v1/responses", async (c) => {
+  const bearer = c.req.header("authorization")
+  const token = bearer?.replace(/Bearer\s+/i, "")
+  const actualToken = token === "dummy" ? state.copilotToken : token
+
+  if (!actualToken) {
+    return c.json({ error: "Missing Copilot token" }, 401)
+  }
+
+  try {
+    const upstreamResponse = await fetch(
+      "https://api.githubcopilot.com/v1/responses",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${actualToken}`,
+          "Content-Type": "application/json",
+          "Copilot-Integration-Id": "vscode-chat",
+          "Editor-Version": "vscode/1.96.0",
+          "User-Agent": "GitHubCopilot/1.168.0",
+          Accept: c.req.header("accept") ?? "application/json",
+        },
+        body: c.req.raw.body,
+      },
+    )
+
+    if (!upstreamResponse.ok) {
+      const errorText = await upstreamResponse.text()
+      console.error("Upstream Error:", errorText)
+      return c.body(errorText, upstreamResponse.status)
+    }
+
+    const contentType = upstreamResponse.headers.get("content-type")
+    if (contentType) c.header("content-type", contentType)
+
+    return new Response(upstreamResponse.body, {
+      status: upstreamResponse.status,
+    })
+  } catch (error) {
+    console.error("Proxy Error:", error)
+    return c.json({ error: "Failed to proxy request to /v1/responses" }, 500)
+  }
+})
 
 // Compatibility with tools that expect v1/ prefix
 server.route("/v1/chat/completions", completionRoutes)

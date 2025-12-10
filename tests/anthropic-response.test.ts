@@ -52,16 +52,18 @@ function isValidAnthropicResponse(payload: unknown): boolean {
   return anthropicMessageResponseSchema.safeParse(payload).success
 }
 
-const anthropicStreamEventSchema = z.looseObject({
-  type: z.enum([
-    "message_start",
-    "content_block_start",
-    "content_block_delta",
-    "content_block_stop",
-    "message_delta",
-    "message_stop",
-  ]),
-})
+const anthropicStreamEventSchema = z
+  .object({
+    type: z.enum([
+      "message_start",
+      "content_block_start",
+      "content_block_delta",
+      "content_block_stop",
+      "message_delta",
+      "message_stop",
+    ]),
+  })
+  .catchall(z.any())
 
 function isValidAnthropicStreamEvent(payload: unknown): boolean {
   return anthropicStreamEventSchema.safeParse(payload).success
