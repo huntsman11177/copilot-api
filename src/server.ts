@@ -25,29 +25,30 @@ server.route("/token", tokenRoute)
 
 const handleResponses = async (c: Context) => {
   const bearer = c.req.header("authorization") ?? ""
-  const token = bearer.replace(/Bearer\s+/i, "")
-  const actualToken = token === "dummy" ? state.copilotToken : token
+  const token = bearer.replace(/Bearer\s+/i, "").trim()
+  const actualToken =
+    token === "dummy" || token === "" ? state.copilotToken : token
 
   if (!actualToken) {
     return c.json({ error: "Missing Copilot token" }, 401)
   }
 
   try {
-    const upstreamResponse = await fetch(
-      "https://api.githubcopilot.com/v1/responses",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${actualToken}`,
-          "Content-Type": "application/json",
-          "Copilot-Integration-Id": "vscode-chat",
-          "Editor-Version": "vscode/1.96.0",
-          "User-Agent": "GitHubCopilot/1.168.0",
-          Accept: c.req.header("accept") ?? "application/json",
-        },
-        body: c.req.raw.body,
+    const upstreamPath = c.req.path.replace(/^\/v1/, "")
+    const upstreamUrl = `https://api.githubcopilot.com${upstreamPath}`
+
+    const upstreamResponse = await fetch(upstreamUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${actualToken}`,
+        "Content-Type": "application/json",
+        "Copilot-Integration-Id": "vscode-chat",
+        "Editor-Version": "vscode/1.96.0",
+        "User-Agent": "GitHubCopilot/1.168.0",
+        Accept: c.req.header("accept") ?? "application/json",
       },
-    )
+      body: c.req.raw.body,
+    })
 
     if (!upstreamResponse.ok) {
       const errorText = await upstreamResponse.text()
