@@ -23,6 +23,15 @@ server.route("/embeddings", embeddingRoutes)
 server.route("/usage", usageRoute)
 server.route("/token", tokenRoute)
 
+const upstreamHeaders = (token: string, acceptHeader?: string | null) => ({
+  Authorization: `Bearer ${token}`,
+  "Content-Type": "application/json",
+  "Copilot-Integration-Id": "vscode-chat",
+  "Editor-Version": "vscode/1.96.0",
+  "User-Agent": "GitHubCopilot/1.168.0",
+  Accept: acceptHeader ?? "application/json",
+})
+
 const handleResponses = async (c: Context) => {
   const bearer = c.req.header("authorization") ?? ""
   const token = bearer.replace(/Bearer\s+/i, "").trim()
@@ -39,14 +48,7 @@ const handleResponses = async (c: Context) => {
 
     const upstreamResponse = await fetch(upstreamUrl, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${actualToken}`,
-        "Content-Type": "application/json",
-        "Copilot-Integration-Id": "vscode-chat",
-        "Editor-Version": "vscode/1.96.0",
-        "User-Agent": "GitHubCopilot/1.168.0",
-        Accept: c.req.header("accept") ?? "application/json",
-      },
+      headers: upstreamHeaders(actualToken, c.req.header("accept")),
       body: c.req.raw.body,
     })
 
