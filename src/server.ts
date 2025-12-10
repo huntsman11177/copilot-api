@@ -32,6 +32,60 @@ const upstreamHeaders = (token: string, acceptHeader?: string | null) => ({
   Accept: acceptHeader ?? "application/json",
 })
 
+const normalizeMessagesToInput = (
+  parsed: Record<string, unknown>,
+): string | undefined => {
+  if ("input" in parsed) return undefined
+  if (!("messages" in parsed)) return undefined
+
+  const messages = (
+    parsed.messages as Array<Record<string, unknown>> | undefined
+  )
+    ?.map((msg) => {
+      const role = (msg.role as string | undefined) ?? "user"
+      const content = msg.content
+      if (typeof content === "string") {
+        return {
+          type: "message",
+          role,
+          content: [{ type: "input_text", text: content }],
+        }
+      }
+      if (Array.isArray(content)) {
+        const text = content
+          .map((part) => {
+            if (typeof part === "string") return part
+            if (typeof part === "object" && part !== null && "text" in part) {
+              const maybeText = (part as { text?: unknown }).text
+              return typeof maybeText === "string" ? maybeText : ""
+            }
+            return ""
+          })
+          .join("")
+        return {
+          type: "message",
+          role,
+          content: [{ type: "input_text", text }],
+        }
+      }
+      return {
+        type: "message",
+        role,
+        content: [{ type: "input_text", text: "" }],
+      }
+    })
+    .filter(Boolean)
+
+  return JSON.stringify({
+    model: parsed.model ?? parsed.selected_model ?? "gpt-4o",
+    input: messages,
+    stream: parsed.stream ?? false,
+    reasoning: parsed.reasoning,
+    temperature: parsed.temperature,
+    max_output_tokens: parsed.max_tokens ?? parsed.max_output_tokens,
+  })
+}
+
 const handleResponses = async (c: Context) => {
   const bearer = c.req.header("authorization") ?? ""
   const token = bearer.replace(/Bearer\s+/i, "").trim()
@@ -45,10 +99,21 @@ const handleResponses = async (c: Context) => {
   try {
     const upstreamUrl = "https://api.githubcopilot.com/v1/responses"
 
+    const rawBody = await c.req.text()
+    let bodyToSend = rawBody
+
+    try {
+      const parsed = JSON.parse(rawBody) as Record<string, unknown>
+      const normalized = normalizeMessagesToInput(parsed)
+      if (normalized) bodyToSend = normalized
+    } catch {
+      // fall back to raw body
+    }
+
     const upstreamResponse = await fetch(upstreamUrl, {
       method: "POST",
       headers: upstreamHeaders(actualToken, c.req.header("accept")),
-      body: c.req.raw.body,
+      body: bodyToSend,
     })
 
     if (!upstreamResponse.ok) {
